@@ -1,90 +1,57 @@
-name: Claude Issue Triage
+name: Claude Issue Formatter
 
 on:
   issues:
     types: [opened, edited]
 
 jobs:
-  triage:
+  format-issue:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
       id-token: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Run Claude Issue Triage
-        id: claude-triage
+      - name: Format issue with Claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          direct_prompt: |
-            Eres un asistente de triaje para el repositorio de un juego de Tetris escrito en JavaScript vanilla (sin dependencias, sin paso de compilación). El archivo principal del juego es `game.js` y contiene: constantes de tablero (COLS=10, ROWS=20, BLOCK=30), definición de piezas y colores, funciones de lógica del juego (collide, rotateCW con wall-kicks, clearLines con puntuación por nivel, ghostY, hardDrop, softDrop, lockPiece, spawn), funciones de renderizado en Canvas 2D (drawBlock, drawGrid, draw, drawNext), gestión de estado (init, togglePause, endGame, loop con requestAnimationFrame), y manejo de teclado.
+          claude_args: "--allowedTools Bash(gh issue *)"
+          prompt: |
+            You are a GitHub issue formatter for a Tetris game project (vanilla JS/HTML/CSS, no dependencies).
 
-            Se ha abierto o editado la siguiente issue en el repositorio:
+            An issue was just ${{ github.event.action }} with the following details:
+            - Issue number: #${{ github.event.issue.number }}
+            - Title: ${{ github.event.issue.title }}
+            - Body: ${{ github.event.issue.body }}
+            - Author: ${{ github.event.issue.user.login }}
 
-            - **Número de issue:** #${{ github.event.issue.number }}
-            - **Título:** ${{ github.event.issue.title }}
-            - **Cuerpo:**
-            ${{ github.event.issue.body }}
+            Your tasks:
+            1. **Add labels** based on the issue content. Use only these labels:
+               - `bug` — something is broken or behaving incorrectly
+               - `enhancement` — new feature or improvement request
+               - `question` — asking for help or clarification
+               - `documentation` — docs need updating
+               - `good first issue` — simple, beginner-friendly task
+               - `duplicate` — if it seems like a known/repeated problem
 
-            Tu tarea es realizar las siguientes acciones usando el CLI de `gh`:
+            2. **Post a comment** on the issue that includes:
+               - A brief, friendly summary of what the issue is about (1-2 sentences)
+               - A "Formatted Report" section with:
+                 - **Type**: Bug / Feature Request / Question / Other
+                 - **Summary**: one clear sentence describing the problem or request
+                 - **Steps to reproduce** (for bugs): list them if not provided, ask the user to provide them if it's a bug
+                 - **Expected behavior** (for bugs): what should happen
+                 - **Suggested labels**: the labels you applied and why
+               - A closing note thanking the contributor
 
-            ## PASO 1: Crear etiquetas si no existen
+            Use the `gh` CLI to apply labels and post the comment. Example commands:
+              gh issue edit ${{ github.event.issue.number }} --add-label "bug" --repo ${{ github.repository }}
+              gh issue comment ${{ github.event.issue.number }} --body "..." --repo ${{ github.repository }}
 
-            Ejecuta estos comandos para crear las etiquetas (--force las crea o actualiza si ya existen):
-
-            gh label create "bug" --color "d73a4a" --description "Algo está roto" --force
-            gh label create "enhancement" --color "a2eeef" --description "Nueva funcionalidad o mejora" --force
-            gh label create "question" --color "d876e3" --description "Necesita aclaración" --force
-            gh label create "gameplay" --color "0075ca" --description "Mecánicas del juego" --force
-            gh label create "ui" --color "e4e669" --description "Visual / estilos" --force
-            gh label create "performance" --color "f9d0c4" --description "Velocidad / framerate" --force
-            gh label create "documentation" --color "0052cc" --description "Documentación" --force
-            gh label create "good first issue" --color "7057ff" --description "Bueno para principiantes" --force
-
-            ## PASO 2: Analizar y etiquetar
-
-            Analiza el título y cuerpo de la issue. Selecciona TODAS las etiquetas que apliquen:
-            - `bug`: comportamiento incorrecto, crash, error o algo que no funciona como debería
-            - `enhancement`: nueva funcionalidad o mejora deseable
-            - `question`: pregunta, solicitud de aclaración, o intención poco clara
-            - `gameplay`: afecta movimiento de piezas, rotación, puntuación, niveles, colisiones, líneas, game over, pausa
-            - `ui`: afecta apariencia visual (colores, canvas, CSS, HUD de puntuación/líneas/nivel, pieza siguiente)
-            - `performance`: lentitud, stuttering, framerate bajo, requestAnimationFrame
-            - `documentation`: pide documentación, comentarios en el código o README
-            - `good first issue`: problema simple, bien delimitado, apto para contribuidor nuevo
-
-            Aplica las etiquetas seleccionadas con:
-            gh issue edit ${{ github.event.issue.number }} --add-label "etiqueta1,etiqueta2"
-
-            ## PASO 3: Publicar comentario de diagnóstico
-
-            Publica un comentario estructurado en español usando gh issue comment. El comentario debe seguir este formato (reemplaza cada sección entre corchetes con el análisis real de la issue):
-
-            ## Diagnóstico automático
-
-            ### Resumen del problema
-            [2-3 oraciones describiendo claramente qué problema o solicitud plantea el usuario]
-
-            ### Análisis técnico
-            [Análisis técnico referenciando la arquitectura de game.js. Menciona las funciones relevantes: tryRotate()/rotateCW() para rotación, clearLines()/LINE_SCORES para puntuación, drawBlock()/drawGrid() para UI, loop()/dropInterval para rendimiento, lockPiece()/spawn() para el ciclo de bloqueo, etc. Si no aplica ninguna función específica, describe el módulo afectado.]
-
-            ### Impacto
-            **Severidad:** [Alta / Media / Baja]
-            [Una oración justificando: Alta=juego injugable o crashea, Media=afecta experiencia pero funciona, Baja=cosmético o mejora menor]
-
-            ### Próximos pasos sugeridos
-            - [Paso concreto 1, idealmente con función y ubicación aproximada en game.js]
-            - [Paso concreto 2]
-            - [Paso concreto 3 si aplica]
-
-            ---
-            *Triaje automático generado por Claude · Etiquetas aplicadas: [lista las etiquetas aplicadas]*
-
-            Importante: adapta cada sección al contenido real de la issue. El comentario debe ser útil para un desarrollador que va a resolver la issue.
+            Be concise, helpful, and friendly. Do not over-engineer the response.
